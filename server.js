@@ -8,9 +8,11 @@ if (major < 22 || (major === 22 && minor < 13)) {
 const { config } = await import('./src/config.js');
 const { openDb, seedIfEmpty } = await import('./src/db.js');
 const { createApp } = await import('./src/app.js');
+const { openPostgres } = await import('./src/database.js');
 
-const db = openDb(config.dbPath);
-const seeded = seedIfEmpty(db, config.seedPassword);
+const db = config.databaseUrl ? openPostgres(config.databaseUrl) : openDb(config.dbPath);
+if (config.databaseUrl) await db.prepare('SELECT 1 FROM users LIMIT 1').get();
+const seeded = config.databaseUrl ? null : seedIfEmpty(db, config.seedPassword);
 if (seeded) {
   console.log('Base de datos nueva: se crearon los usuarios superadmin, admin y encargado.');
   if (seeded.usedDefault) console.log(`Contraseña inicial: ${seeded.password}  (cámbiala o define SEED_PASSWORD en .env)`);
@@ -20,6 +22,6 @@ if (config.ephemeralSecret) console.warn('Aviso: JWT_SECRET no está definido; s
 const server = createApp({ db, config });
 server.listen(config.port, () => console.log(`API lista en http://localhost:${config.port}  (prueba: /api/health)`));
 
-const shutdown = () => server.close(() => { db.close(); process.exit(0); });
+const shutdown = () => server.close(async () => { await db.close(); process.exit(0); });
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

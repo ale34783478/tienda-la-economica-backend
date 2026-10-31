@@ -1,8 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-
-// Carga backend/.env si existe (Node 22 trae soporte nativo).
-try { process.loadEnvFile(new URL('../.env', import.meta.url)); } catch { /* sin .env: se usan valores por defecto */ }
+import './env.js';
 
 const env = process.env;
 const isProd = env.NODE_ENV === 'production';
@@ -20,6 +18,7 @@ if (!jwtSecret || jwtSecret.length < 16) {
 
 export const config = {
   port: Number(env.PORT) || 8080,
+  databaseUrl: env.DATABASE_URL || '',
   dbPath: env.DB_PATH || fileURLToPath(new URL('../data/inventario.db', import.meta.url)),
   corsOrigins: (env.CORS_ORIGIN || '*').split(',').map(s => s.trim()).filter(Boolean),
   jwtSecret,

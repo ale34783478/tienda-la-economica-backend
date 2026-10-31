@@ -1,6 +1,8 @@
 # Backend — Tienda La Económica (Inventario)
 
-API REST en **Node.js + SQLite**, sin dependencias externas (no hace falta `npm install`).
+API REST en **Node.js + PostgreSQL (Neon)**, con SQLite opcional para trabajo local. Instala sus dependencias con `npm install`.
+
+Gu?a de conexi?n, migraci?n y despliegue gratuito: [DEPLOY_NEON.md](DEPLOY_NEON.md).
 Implementa los contratos del README del frontend: productos, inventario, movimientos, reportes y autenticación; además usuarios y configuración.
 
 ## Requisitos
@@ -10,11 +12,12 @@ Implementa los contratos del README del frontend: productos, inventario, movimie
 ```bash
 cd backend
 cp .env.example .env      # opcional: ajusta puerto, CORS y contraseñas
+npm install
 node server.js            # o: npm start   (npm run dev reinicia al guardar cambios)
 ```
 Verás `API lista en http://localhost:8080`. Prueba: http://localhost:8080/api/health
 
-La primera vez se crea `data/inventario.db` con los mismos productos de demostración del frontend y tres usuarios:
+Solo en modo SQLite (sin `DATABASE_URL`), la primera vez se crea `data/inventario.db` con los mismos productos de demostración del frontend y tres usuarios:
 
 | Usuario      | Rol                | Contraseña inicial |
 |--------------|--------------------|--------------------|
@@ -79,5 +82,7 @@ En el `.env` del frontend: `VITE_DATA_MODE=api` y `VITE_API_BASE_URL=http://loca
 Nota: por ahora el frontend todavía usa `localStorage` (`Store.jsx`) y no llama a `src/services/api.js`; ese cambio es el siguiente paso.
 
 ## Despliegue
-Necesita un servidor Node con disco persistente (Render, Railway, Fly.io o un VPS) porque la base es un archivo. En plataformas sin disco persistente (como Vercel) los datos se perderían: allí habría que migrar a PostgreSQL.
-Define `NODE_ENV=production`, `JWT_SECRET`, `CORS_ORIGIN` y `DB_PATH` apuntando al disco persistente.
+
+Con `DATABASE_URL` el backend usa PostgreSQL en Neon y no necesita disco persistente.
+Ver [DEPLOY_NEON.md](DEPLOY_NEON.md). SQLite solo necesita disco persistente si se elige
+mantener ese modo en un servidor. No publicar la base local ni las credenciales en GitHub.

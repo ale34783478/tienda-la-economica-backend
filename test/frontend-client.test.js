@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { openDb, seedIfEmpty } from '../src/db.js';
+import { testDatabase } from '../test-support/database.js';
 import { createApp } from '../src/app.js';
 
 const clientPath = new URL('../../src/services/inventory.js', import.meta.url);
@@ -13,8 +13,7 @@ const realFetch = globalThis.fetch;
 
 before(async () => {
   if (!hasClient) return;
-  db = openDb(':memory:');
-  seedIfEmpty(db, PASS);
+  db = await testDatabase(PASS);
   server = createApp({ db, config: { corsOrigins: ['*'], jwtSecret: 'y'.repeat(32), tokenTtlSeconds: 3600 } });
   await new Promise((r) => server.listen(0, r));
   const base = `http://localhost:${server.address().port}`;
@@ -23,7 +22,7 @@ before(async () => {
   api = await import(new URL('../../src/services/api.js', import.meta.url));
   inv = await import(clientPath);
 });
-after(() => { globalThis.fetch = realFetch; server?.close(); db?.close(); });
+after(async () => { globalThis.fetch = realFetch; server?.close(); await db?.close(); });
 
 const skip = { skip: !hasClient && 'se ejecuta dentro del proyecto completo (necesita src/services)' };
 

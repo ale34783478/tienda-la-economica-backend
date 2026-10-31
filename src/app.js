@@ -2,8 +2,10 @@ import { createServer } from 'node:http';
 import { HttpError, Reply, readJson } from './http.js';
 import { verifyToken } from './security.js';
 import { buildRouter } from './routes.js';
+import { wrapSqlite } from './database.js';
 
 export function createApp({ db, config }) {
+  if (!db.dialect) db = wrapSqlite(db);
   const router = buildRouter({ db, config });
 
   const corsHeaders = (origin) => {
@@ -24,15 +26,15 @@ export function createApp({ db, config }) {
     res.end(payload);
   }
 
-  function authenticate(req) {
+  async function authenticate(req) {
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     const payload = token && verifyToken(token, config.jwtSecret);
     if (!payload) throw new HttpError(401, 'Sesión no válida o expirada. Inicia sesión de nuevo.', 'UNAUTHORIZED');
-    if (db.prepare('SELECT 1 FROM revoked_tokens WHERE jti = ?').get(payload.jti)) {
+    if (await db.prepare('SELECT 1 FROM revoked_tokens WHERE jti = ?').get(payload.jti)) {
       throw new HttpError(401, 'La sesión fue cerrada. Inicia sesión de nuevo.', 'UNAUTHORIZED');
     }
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.sub);
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(payload.sub);
     if (!user || !user.active) throw new HttpError(401, 'La cuenta no existe o está desactivada.', 'UNAUTHORIZED');
     return { user, payload };
   }
@@ -53,7 +55,7 @@ export function createApp({ db, config }) {
       let user = null;
       let auth = null;
       if (route.opts.auth !== false) {
-        ({ user, payload: auth } = authenticate(req));
+        ({ user, payload: auth } = await authenticate(req));
         if (route.opts.roles && !route.opts.roles.includes(user.role)) {
           throw new HttpError(403, 'No tienes permiso para realizar esta acción.', 'FORBIDDEN');
         }
@@ -67,11 +69,14 @@ export function createApp({ db, config }) {
       if (result instanceof Reply) return send(res, result.status, result.body, cors);
       return result === null || result === undefined ? send(res, 204, null, cors) : send(res, 200, result, cors);
     } catch (err) {
+      // Navigation/logout can cancel an in-flight request; there is no client left to answer.
+      if (req.aborted || res.destroyed) return;
       if (err instanceof HttpError) {
         return send(res, err.status, { message: err.message, code: err.code, details: err.details ?? null }, cors);
       }
       if (err instanceof URIError) return send(res, 400, { message: 'URL mal formada.', code: 'BAD_URL', details: null }, cors);
-      console.error('Error interno:', err);
+      console.error('Error interno:', err.code || err.name);
+      if (err.code === '23505') return send(res, 409, { message: 'El c?digo o usuario ya existe.', code: 'DUPLICATE', details: null }, cors);
       return send(res, 500, { message: 'Error interno del servidor.', code: 'INTERNAL_ERROR', details: null }, cors);
     }
   });

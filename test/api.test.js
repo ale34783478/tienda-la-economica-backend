@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openDb, seedIfEmpty } from '../src/db.js';
+import { testDatabase } from '../test-support/database.js';
 import { createApp } from '../src/app.js';
 
 let server, base, db;
@@ -19,13 +19,12 @@ async function call(method, path, { token, body, headers } = {}) {
 const login = async (username) => (await call('POST', '/api/auth/login', { body: { username, password: PASS } })).data.token;
 
 before(async () => {
-  db = openDb(':memory:');
-  seedIfEmpty(db, PASS);
+  db = await testDatabase(PASS);
   server = createApp({ db, config });
   await new Promise((r) => server.listen(0, r));
   base = `http://localhost:${server.address().port}`;
 });
-after(() => { server.close(); db.close(); });
+after(async () => { server.close(); await db.close(); });
 
 test('health no requiere sesión', async () => {
   const r = await call('GET', '/api/health');
@@ -195,4 +194,19 @@ test('errores: JSON inválido, 404, 405 y CORS', async () => {
   assert.equal(pre.headers.get('access-control-allow-origin'), 'http://localhost:5173');
   const ajeno = await fetch(base + '/api/health', { headers: { Origin: 'http://malo.com' } });
   assert.equal(ajeno.headers.get('access-control-allow-origin'), null);
+});
+
+test('salidas concurrentes no pierden movimientos ni permiten stock negativo', async () => {
+  const token = await login('admin');
+  const product = await call('POST', '/api/products', { token, body: {
+    code: 'CON-001', name: 'Concurrencia', category: 'Pruebas', price: 1, stock: 5, minStock: 1,
+  } });
+  const productId = product.data.id;
+  const results = await Promise.all([1, 2].map(() => call('POST', '/api/inventory/movements', {
+    token, body: { productId, type: 'Salida', quantity: 4, reason: 'Prueba simultánea' },
+  })));
+  assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
+  assert.equal((await call('GET', `/api/products/${productId}`, { token })).data.stock, 1);
+  const history = (await call('GET', `/api/inventory/movements?productId=${productId}`, { token })).data;
+  assert.equal(history.filter(m => m.type === 'Salida').length, 1);
 });
