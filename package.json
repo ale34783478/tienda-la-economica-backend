@@ -1,0 +1,13 @@
+{
+  "name": "tienda-la-economica-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "API REST del inventario de Tienda La Económica (Node.js + SQLite, sin dependencias externas)",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  }
+}
